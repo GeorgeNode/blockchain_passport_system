@@ -226,3 +226,83 @@ Clarinet.test({
     },
 });
 
+Clarinet.test({
+    name: "Ensure proper error handling for invalid operations",
+    async fn(chain: Chain, accounts: Map<string, Account>)
+    {
+        const deployer = accounts.get("deployer")!;
+        const authority = accounts.get("wallet_1")!;
+        const passportHolder = accounts.get("wallet_2")!;
+
+        // Add authority
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "add-authority",
+                [types.principal(authority.address), types.utf8("Test Authority")],
+                deployer.address
+            ),
+        ]);
+
+        // Try to issue duplicate passport
+        const passportId = "PASS123";
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "issue-passport",
+                [
+                    types.utf8(passportId),
+                    types.principal(passportHolder.address),
+                    types.utf8("John Doe"),
+                    types.uint(19900101),
+                    types.utf8("USA"),
+                    types.uint(365),
+                    types.none(),
+                ],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+
+        // Try to issue duplicate passport
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "issue-passport",
+                [
+                    types.utf8(passportId),
+                    types.principal(passportHolder.address),
+                    types.utf8("John Doe"),
+                    types.uint(19900101),
+                    types.utf8("USA"),
+                    types.uint(365),
+                    types.none(),
+                ],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(err u3)'); // err-already-exists
+
+        // Try to revoke non-existent passport
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "revoke-passport",
+                [types.utf8("NONEXISTENT")],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(err u4)'); // err-not-found
+
+        // Try unauthorized operations
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "revoke-passport",
+                [types.utf8(passportId)],
+                passportHolder.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(err u1)'); // err-unauthorized
+    },
+});
