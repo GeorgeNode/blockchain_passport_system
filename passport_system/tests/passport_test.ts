@@ -143,3 +143,86 @@ Clarinet.test({
         assertEquals(block.receipts[0].result.includes(fullName), true);
     },
 });
+
+Clarinet.test({
+    name: "Ensure passport operations (revoke, update, extend) work correctly",
+    async fn(chain: Chain, accounts: Map<string, Account>)
+    {
+        const deployer = accounts.get("deployer")!;
+        const authority = accounts.get("wallet_1")!;
+        const passportHolder = accounts.get("wallet_2")!;
+        const passportId = "PASS123";
+
+        // Setup: Add authority and issue passport
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "add-authority",
+                [types.principal(authority.address), types.utf8("Test Authority")],
+                deployer.address
+            ),
+            Tx.contractCall(
+                "digital-passport",
+                "issue-passport",
+                [
+                    types.utf8(passportId),
+                    types.principal(passportHolder.address),
+                    types.utf8("John Doe"),
+                    types.uint(19900101),
+                    types.utf8("USA"),
+                    types.uint(365),
+                    types.none(),
+                ],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[1].result, '(ok true)');
+
+        // Test passport revocation
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "revoke-passport",
+                [types.utf8(passportId)],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+
+        // Verify passport is invalid
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "is-valid-passport?",
+                [types.utf8(passportId)],
+                deployer.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, 'false');
+
+        // Test metadata update
+        const newMetadata = "https://example.com/metadata";
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "update-passport-metadata",
+                [types.utf8(passportId), types.some(types.utf8(newMetadata))],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+
+        // Test validity extension
+        const extensionPeriod = 180;
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "extend-passport-validity",
+                [types.utf8(passportId), types.uint(extensionPeriod)],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+    },
+});
+
