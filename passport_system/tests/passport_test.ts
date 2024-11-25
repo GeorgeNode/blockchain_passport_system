@@ -85,3 +85,61 @@ Clarinet.test({
         assertEquals(block.receipts[0].result, 'false');
     },
 });
+
+Clarinet.test({
+    name: "Ensure passport issuance works correctly",
+    async fn(chain: Chain, accounts: Map<string, Account>)
+    {
+        const deployer = accounts.get("deployer")!;
+        const authority = accounts.get("wallet_1")!;
+        const passportHolder = accounts.get("wallet_2")!;
+
+        // Add authority first
+        let block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "add-authority",
+                [types.principal(authority.address), types.utf8("Test Authority")],
+                deployer.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+
+        // Issue passport
+        const passportId = "PASS123";
+        const fullName = "John Doe";
+        const dateOfBirth = 19900101;
+        const nationality = "USA";
+        const validityPeriod = 365;
+
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "issue-passport",
+                [
+                    types.utf8(passportId),
+                    types.principal(passportHolder.address),
+                    types.utf8(fullName),
+                    types.uint(dateOfBirth),
+                    types.utf8(nationality),
+                    types.uint(validityPeriod),
+                    types.none(),
+                ],
+                authority.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result, '(ok true)');
+
+        // Verify passport exists
+        block = chain.mineBlock([
+            Tx.contractCall(
+                "digital-passport",
+                "get-passport",
+                [types.utf8(passportId)],
+                deployer.address
+            ),
+        ]);
+        assertEquals(block.receipts[0].result.includes(passportHolder.address), true);
+        assertEquals(block.receipts[0].result.includes(fullName), true);
+    },
+});
